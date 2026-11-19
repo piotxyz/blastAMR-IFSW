@@ -453,24 +453,25 @@ bool Foam::cpuLoadPolicy::canBalance()
 }
 
 Foam::scalarField Foam::cpuLoadPolicy::cellWeights() {
-    scalar totalLoad = returnReduce(myLoad_, sumOp<scalar>());
-    scalar idealLoad = totalLoad / scalar(Pstream::nProcs());
+    // 2026-10-23 (LaserbeamFoam IFSW): every cell of a processor weighs that
+    // processor's measured compute time per cell, relative to the global
+    // mean, so the decomposer balances the predicted compute time. The
+    // previous form (imbalance, or 1/imbalance on an overloaded processor)
+    // gave weight 100 to a processor 1 % over the mean and 0.01 to one 1 %
+    // under. Original: cpuLoadPolicy.C.preWeightFix.bak
+    const label nCells = mesh_.nCells();
+    const scalar totalLoad = returnReduce(myLoad_, sumOp<scalar>());
+    const label totalCells = returnReduce(nCells, sumOp<label>());
 
     // Protect against division by zero
-    if (idealLoad < SMALL || myLoad_ < SMALL)
+    if (totalLoad < SMALL || myLoad_ < SMALL || nCells == 0)
     {
-        return scalarField(mesh_.nCells(), 1.0);
+        return scalarField(nCells, 1.0);
     }
 
-    scalar imbalance = mag(myLoad_ - idealLoad) / idealLoad;
+    const scalar meanLoadPerCell = totalLoad/scalar(totalCells);
 
-    // Protect against division by zero when inverting imbalance
-    if (myLoad_ > idealLoad && imbalance > SMALL)
-    {
-        imbalance = 1.0/imbalance;
-    }
-
-    return scalarField(mesh_.nCells(), imbalance > SMALL ? imbalance : 1.0);
+    return scalarField(nCells, (myLoad_/scalar(nCells))/meanLoadPerCell);
 }
 
 bool Foam::cpuLoadPolicy::willBeBeneficial

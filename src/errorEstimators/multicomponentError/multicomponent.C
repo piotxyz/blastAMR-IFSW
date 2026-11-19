@@ -114,7 +114,11 @@ void Foam::errorEstimators::multicomponent::update(const bool scale)
             false
         ),
         mesh_,
-        -1.0
+        // 2026-11-04: a bare -1.0 resolved to the read-from-file constructor's
+        // bool argument under OpenFOAM v2506 ("Had readOption NO_READ for
+        // field error, but constructor always reads field"); give the value
+        // its dimensions so the dimensioned<Type> constructor is chosen
+        dimensionedScalar("error", dimless, -1.0)
     );
 
     forAll(errors_, i)
